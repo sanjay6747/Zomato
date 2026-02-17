@@ -1,23 +1,29 @@
 pipeline {
     agent any
+
     tools {
         jdk 'jdk17'
         nodejs 'node23'
     }
+
     environment {
-        SCANNER_HOME=tool 'sonar-scanner'
+        SCANNER_HOME = tool 'sonar-scanner'
     }
+
     stages {
+
         stage ("clean workspace") {
             steps {
                 cleanWs()
             }
         }
+
         stage ("Git Checkout") {
             steps {
                 git 'https://github.com/sanjay6747/Zomato.git'
             }
         }
+
         stage("Sonarqube Analysis"){
             steps{
                 withSonarQubeEnv('sonar-server') {
@@ -26,44 +32,51 @@ pipeline {
                 }
             }
         }
+
         stage("Code Quality Gate"){
            steps {
                 script {
-                    waitForQualityGate abortPipeline: false, credentialsId: 'Sonar-token' 
+                    waitForQualityGate abortPipeline: false, credentialsId: 'Sonar-token'
                 }
-            } 
+            }
         }
+
         stage("Install NPM Dependencies") {
             steps {
                 sh "npm install"
             }
         }
+
         stage('OWASP FS SCAN') {
             steps {
                 dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit -n', odcInstallation: 'DP-Check'
                 dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
-    }
-}
+            }
+        }
+
         stage ("Trivy File Scan") {
             steps {
                 sh "trivy fs . > trivy.txt"
             }
         }
+
         stage ("Build Docker Image") {
             steps {
                 sh "docker build -t zomato ."
             }
         }
+
         stage ("Tag & Push to DockerHub") {
             steps {
                 script {
                     withDockerRegistry(credentialsId: 'docker') {
-                        sh "docker tag zomato sanjuuu123/zomato:latest "
-                        sh "docker push sanjuuu123/zomato:latest "
+                        sh "docker tag zomato sanjuuu123/zomato:latest"
+                        sh "docker push sanjuuu123/zomato:latest"
                     }
                 }
             }
         }
+
         stage('Docker Scout Image') {
             steps {
                 script{
@@ -75,20 +88,24 @@ pipeline {
                 }
             }
         }
+
         stage ("Deploy to Container") {
-    steps {
-        sh '''
-        docker stop zomato || true
-        docker rm zomato || true
-        docker run -d --name zomato -p 3000:3000 sanjuuu123/zomato:latest
-        '''
-    }
-}
+            steps {
+                sh '''
+                docker stop zomato || true
+                docker rm zomato || true
+                docker run -d --name zomato -p 3000:3000 sanjuuu123/zomato:latest
+                '''
+            }
+        }
+
+    }   // ✅ THIS WAS MISSING (closing stages block)
+
     post {
-    always {
-        emailext attachLog: true,
-            subject: "'${currentBuild.result}'",
-            body: """
+        always {
+            emailext attachLog: true,
+                subject: "'${currentBuild.result}'",
+                body: """
                 <html>
                 <body>
                     <div style="background-color: #FFA07A; padding: 10px; margin-bottom: 10px;">
@@ -102,10 +119,10 @@ pipeline {
                     </div>
                 </body>
                 </html>
-            """,
-            to: 'sanjay.6747@gmail.com',
-            mimeType: 'text/html',
-            attachmentsPattern: 'trivy.txt'
+                """,
+                to: 'sanjay.6747@gmail.com',
+                mimeType: 'text/html',
+                attachmentsPattern: 'trivy.txt'
         }
     }
 }
